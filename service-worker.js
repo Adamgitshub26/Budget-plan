@@ -1,5 +1,5 @@
 // Bump CACHE version whenever you change app files, so devices fetch the new copy.
-const CACHE = "budgets-v2.1";
+const CACHE = "budgets-v2.2";
 const ASSETS = [
   "./",
   "./index.html",

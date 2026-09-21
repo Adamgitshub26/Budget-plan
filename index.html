@@ -48,7 +48,7 @@
 
 <script>
 "use strict";
-const VERSION = "2.1";
+const VERSION = "2.2";
 const KEY = "budget:v1";
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const keyOf = (y,m)=>`${y}-${String(m+1).padStart(2,"0")}`;
@@ -249,6 +249,37 @@ function ask(message,onYes){
   document.body.appendChild(ov);
 }
 
+// ---- notes / comments per month ----
+function noteOf(b,k){ return (b.notes&&b.notes[k])?b.notes[k]:""; }
+function editNote(k){
+  const b=activeBudget(); const cur=noteOf(b,k);
+  const ov=document.createElement("div"); ov.className="overlay";
+  ov.innerHTML=`<div class="modal"><p style="margin:0 0 4px;font-size:15px;font-weight:600">Note · ${labelOf(k)}</p>
+    <p style="margin:0 0 10px;font-size:12px;color:var(--muted)">A comment for this month. Months with a note turn green in the Summary.</p>
+    <textarea id="mt" rows="4" placeholder="Type a note…" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:15px;font-family:inherit;resize:vertical;margin-bottom:14px">${esc(cur)}</textarea>
+    <div style="display:flex;gap:8px"><button class="btn" data-x="c" style="flex:1">Cancel</button><button class="btn" data-x="clr" style="flex:1;color:var(--expense)">Delete</button><button class="btn" data-x="s" style="flex:1;background:var(--ink);color:#fff;border:none;font-weight:600">Save</button></div></div>`;
+  ov.addEventListener("click",(e)=>{ const x=e.target.dataset.x;
+    if(e.target===ov||x==="c"){ document.body.removeChild(ov); }
+    else if(x==="clr"){ if(b.notes) delete b.notes[k]; document.body.removeChild(ov); persist(); render(); }
+    else if(x==="s"){ const v=ov.querySelector("#mt").value.trim(); if(!b.notes) b.notes={}; if(v) b.notes[k]=v; else delete b.notes[k]; document.body.removeChild(ov); persist(); render(); }
+  });
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const el=ov.querySelector("#mt"); if(el) el.focus(); },50);
+}
+function showNote(k){
+  const b=activeBudget(); const txt=noteOf(b,k);
+  const ov=document.createElement("div"); ov.className="overlay";
+  ov.innerHTML=`<div class="modal"><p style="margin:0 0 10px;font-size:15px;font-weight:600">Note · ${labelOf(k)}</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5;white-space:pre-wrap;color:var(--ink)">${esc(txt)||'<span style="color:var(--faint)">No note yet.</span>'}</p>
+    <div style="display:flex;gap:8px"><button class="btn" data-x="open" style="flex:1">Open month</button><button class="btn" data-x="edit" style="flex:1">Edit note</button><button class="btn" data-x="c" style="flex:1;background:var(--ink);color:#fff;border:none;font-weight:600">Close</button></div></div>`;
+  ov.addEventListener("click",(e)=>{ const x=e.target.dataset.x; if(!x&&e.target!==ov) return;
+    if(e.target===ov||x==="c"){ document.body.removeChild(ov); }
+    else if(x==="open"){ document.body.removeChild(ov); const [y,m]=k.split("-").map(Number); ym={y,m:m-1}; view="month"; render(); }
+    else if(x==="edit"){ document.body.removeChild(ov); editNote(k); }
+  });
+  document.body.appendChild(ov);
+}
+
 // ---- totals refresh (no re-render, keeps input focus) ----
 function refreshTotals(){
   const b=activeBudget(); const md=b.months[monthKey()]||{}; const cur=b.currency?b.currency+" ":"";
@@ -303,7 +334,7 @@ function summaryHTML(){
   const b=activeBudget();
   const withData=Object.keys(b.months).filter(k=>Object.keys(b.months[k]).length).sort();
   const cols=Array.from(new Set([...withData,monthKey()])).sort();
-  const head=`<tr><th class="stick">Category</th>${cols.map(k=>`<th style="cursor:pointer;${k===monthKey()?'color:var(--ink);font-weight:700':'font-weight:500'}" data-action="summary-open-month" data-key="${k}">${labelOf(k)}</th>`).join("")}</tr>`;
+  const head=`<tr><th class="stick">Category</th>${cols.map(k=>{const hasNote=!!noteOf(b,k); const action=hasNote?"summary-note":"summary-open-month"; const style=hasNote?`cursor:pointer;background:var(--income);color:#fff;font-weight:700`:`cursor:pointer;${k===monthKey()?'color:var(--ink);font-weight:700':'font-weight:500'}`; return `<th style="${style}" data-action="${action}" data-key="${k}">${labelOf(k)}${hasNote?' 💬':''}</th>`;}).join("")}</tr>`;
   const dataRow=(c,accent)=>`<tr><td class="stick" style="color:var(--ink)">${esc(c.name||c.id)}</td>${cols.map(k=>{const v=b.months[k]&&b.months[k][c.id]; return `<td style="color:${v!=null?accent:'var(--faint)'}">${v!=null?fmt(v):""}</td>`;}).join("")}</tr>`;
   const headRow=(name)=>`<tr><td class="stick" style="background:var(--paper);font-size:11px;letter-spacing:.6px;text-transform:uppercase;font-weight:700;color:var(--muted)">${esc(name||' ')}</td>${cols.map(()=>`<td style="background:var(--paper)"></td>`).join("")}</tr>`;
   const totRow=(label,get,strong,color)=>`<tr><td class="stick" style="font-weight:700;background:${strong?'var(--posBg)':'var(--paper)'};color:${color||'var(--ink)'}">${label}</td>${cols.map(k=>{const v=get(k); const c= strong?(v>=0?'var(--posInk)':'var(--negInk)'):(color||'var(--ink)'); const bg= strong?(v>=0?'var(--posBg)':'var(--negBg)'):'var(--paper)'; return `<td style="font-weight:700;color:${c};background:${bg}">${v<0?"−":""}${fmt(Math.abs(v))}</td>`;}).join("")}</tr>`;
@@ -356,6 +387,12 @@ function render(){
       <button class="btn" style="flex:1 1 45%;color:var(--expense)" data-action="clear-month">Clear month</button>
       <button class="btn" style="flex:1 1 45%;color:var(--expense)" data-action="delete-month">Delete month</button>
     </div>
+    ${noteOf(b,monthKey())
+      ? `<div class="card" data-action="edit-note" style="cursor:pointer;padding:12px 14px;margin-bottom:18px;border-color:var(--income);background:var(--posBg)">
+          <div style="font-size:12px;letter-spacing:.6px;color:var(--posInk);font-weight:700;margin-bottom:4px">NOTE · tap to edit 💬</div>
+          <div style="font-size:15px;color:var(--ink);line-height:1.4;white-space:pre-wrap">${esc(noteOf(b,monthKey()))}</div>
+        </div>`
+      : `<button class="btn" style="width:100%;margin-bottom:18px;color:var(--income);border-color:var(--income)" data-action="edit-note">＋ Add a note for ${MONTHS[ym.m]}</button>`}
     ${editMode?`<div class="card" style="padding:12px;margin-bottom:18px">
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-bottom:10px"><span>Currency label</span><input value="${esc(b.currency)}" placeholder="e.g. ₹, $, AED" style="border:1px solid var(--line);border-radius:6px;padding:5px 8px;width:110px" data-role="currency"></div>
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-bottom:12px"><span>Budget name</span><input value="${esc(b.name)}" style="flex:1;min-width:0;border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-weight:600" data-role="budgetname"></div>
@@ -405,6 +442,8 @@ app.addEventListener("click",(e)=>{
   else if(a==="move") move(t.dataset.sect,parseInt(t.dataset.idx,10),parseInt(t.dataset.dir,10));
   else if(a==="delete-budget") deleteBudget();
   else if(a==="summary-open-month"){ const [y,m]=t.dataset.key.split("-").map(Number); ym={y,m:m-1}; view="month"; render(); }
+  else if(a==="summary-note") showNote(t.dataset.key);
+  else if(a==="edit-note") editNote(monthKey());
 });
 app.addEventListener("input",(e)=>{
   const r=e.target.dataset.role; if(!r) return;
